@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<head>
+    <style>
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        .wrapper {
+            display: flex;
+            flex-direction: row;
+        }
+
+        .canvasWrapper {
+            width: 500px;
+            height: 500px;
+            overflow: auto;
+        }
+
+        #canvas {
+            position: relative;
+            top: 0;
+            bottom: 0;
+            cursor: pointer;
+        }
+
+        .css {
+            position: relative;
+            width: 400px;
+            top: 2px;
+            bottom: 0;
+            border-left: 2px solid gray;
+            padding: 20px;
+        }
+
+        h2 {
+            position: relative;
+        }
+
+        .copyBtn {
+            position: absolute;
+            top: 0px;
+            right: 20px;
+            display: inline-block;
+            width: 10px;
+            height: 14px;
+            border: 2px solid black;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .copyBtn::before {
+            content: '';
+            position: absolute;
+            display: inline-block;
+            width: 10px;
+            height: 14px;
+            top: 2px;
+            left: 2px;
+            border: 2px solid black;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .inputs input {
+            margin-bottom: 20px;
+        }
+
+        .code {
+            background-color: lightgray;
+            padding: 10px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="canvasWrapper">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div class="css">
+            <div class="inputs">
+                <div>Width:  <input id="width" onchange="window.draw()" value="100" /> px</div>
+                <div>Height: <input id="height" onchange="window.draw()" value="100" /> px</div>
+                <div>Cells size: <input id="cellsize" onchange="window.draw()" value="5" /> px</div>
+                <div>Cell color: <input type="color" value="#000" id="color"></div>
+                <div>Eraiser on: <input type="checkbox" class="eraiser"></div>
+            </div>
+            <h2>css <span class="copyBtn"></span></h2>
+            <pre class="code">
+            </pre>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");  
+            const eraiser = document.querySelector('.eraiser');
+            let color = '#000';
+            let width = document.getElementById("width").value;
+            let height = document.getElementById("height").value;
+            let cellSize = document.getElementById("cellsize").value;
+            let resultCells = [];
+            let code;
+            let canvasCellSizeRow;
+            let canvasCellSizeCol;
+            const codeElement = document.getElementsByClassName('code')[0];
+
+            /* From https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript */
+            function fallbackCopyTextToClipboard(text) {
+                var textArea = document.createElement("textarea");
+                textArea.value = text;
+                
+                // Avoid scrolling to bottom
+                textArea.style.top = "0";
+                textArea.style.left = "0";
+                textArea.style.position = "fixed";
+
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    const successful = document.execCommand('copy');
+                    const msg = successful ? 'successful' : 'unsuccessful';
+                    console.log('Fallback: Copying text command was ' + msg);
+                } catch (err) {
+                    console.error('Fallback: Oops, unable to copy', err);
+                }
+
+                document.body.removeChild(textArea);
+            }
+
+            function copyTextToClipboard() {
+                const text = code.replaceAll('&#60;', '<').replaceAll('&#62;', '>');
+                if (!navigator.clipboard) {
+                    fallbackCopyTextToClipboard(text);
+                    return;
+                }
+                navigator.clipboard.writeText(text).then(function() {
+                    console.log('Async: Copying to clipboard was successful!');
+                }, function(err) {
+                    console.error('Async: Could not copy text: ', err);
+                });
+            }
+
+            function getCursorPosition(canvas, event) {
+                const rect = canvas.getBoundingClientRect()
+                const x = event.clientX - rect.left
+                const y = event.clientY - rect.top
+                return [x, y];
+            }
+
+            function colorChange(event) {
+                color = event.target.value;
+            }
+
+            function init() {
+                canvas.width = 500;
+                canvas.height = 500;
+
+                const colorEll = document.querySelector("#color");
+                colorEll.value = color;
+                colorEll.addEventListener("input", colorChange, false);
+                colorEll.select();
+            }
+
+            function codeUpdate() {
+                const rowCellsCount = Math.floor(height / cellSize);
+                const colCellsCount = Math.floor(width / cellSize);
+                let shadow = [];
+
+                for (let i = 0; i < colCellsCount; i++) {
+                    for (let j = 0; j < rowCellsCount; j++) {
+                        if (resultCells[i][j]) {
+                            shadow.push(`${cellSize * j}px ${cellSize * i + 1 * cellSize}px ${resultCells[i][j]}`);
+                        }
+                    }
+                }
+
+                code = `
+&#60;style&#62;
+    .pixel-generator-image {
+        position: relative;
+        width: ${width}px;
+        height: ${height}px;
+    }
+
+    .pixel-generator-image::before {
+        content: '';
+        position: absolute;
+        top: -${cellSize}px;
+        left: 0;
+        width: ${cellSize}px;
+        height: ${cellSize}px;
+        ${shadow.length !== 0 ?`box-shadow: ${shadow.join(', ')};` : ''}
+    }
+&#60;/style&#62;
+&#60;div class="pixel-generator-image"&#62;&#60;/div&#62;
+                    `
+                codeElement.innerHTML = code;
+            }
+
+            function draw() {
+                width = Number(document.getElementById("width").value);
+                height = Number(document.getElementById("height").value);
+                cellSize = Number(document.getElementById("cellsize").value);
+                if (cellSize > height || cellSize > width) {
+                    alert('Cell size can\'t be bigger than width or height');
+                    return;
+                }
+
+                resultCells = [];
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.lineWidth = 1;
+                
+                const rowCellsCount = Math.floor(height / cellSize);
+                const colCellsCount = Math.floor(width / cellSize);
+
+                for (let i = 0; i < colCellsCount; i++) {
+                    resultCells.push(new Array(rowCellsCount))
+                }
+                codeUpdate();
+
+                canvasCellSizeRow = canvas.width / rowCellsCount;
+                canvasCellSizeCol = canvas.height / colCellsCount;
+                
+                ctx.fillStyle = '#000';
+                for (let i = 1; i <= rowCellsCount; i++) {
+                    ctx.beginPath();      
+                    ctx.moveTo(canvasCellSizeRow * i, 0);   
+                    ctx.lineTo(canvasCellSizeRow * i, 500);  
+                    ctx.stroke();
+                }
+
+                for (let i = 1; i <= colCellsCount; i++) {
+                    ctx.beginPath();      
+                    ctx.moveTo(0, canvasCellSizeCol * i);   
+                    ctx.lineTo(500, canvasCellSizeCol * i);  
+                    ctx.stroke();
+                }
+            }
+
+
+            canvas.addEventListener('mousedown', (e) => {
+                const [x, y] = getCursorPosition(canvas, e);
+
+                const rowNumber = Math.floor(x / canvasCellSizeRow);
+                const colNumber = Math.floor(y / canvasCellSizeCol);
+                if (eraiser.checked) {
+                    ctx.fillStyle = '#000';
+                    // чистим квадратик
+                    ctx.clearRect(rowNumber * canvasCellSizeRow + 1, colNumber * canvasCellSizeCol + 1, canvasCellSizeRow - 2, canvasCellSizeCol - 2);
+                    
+                    // возвращаем обводку
+                    ctx.beginPath();      
+                    ctx.moveTo(rowNumber * canvasCellSizeRow, colNumber * canvasCellSizeCol);   
+                    ctx.lineTo(rowNumber * canvasCellSizeRow + canvasCellSizeRow, colNumber * canvasCellSizeCol);  
+                    ctx.stroke();
+                    ctx.beginPath();      
+                    ctx.moveTo(rowNumber * canvasCellSizeRow, colNumber * canvasCellSizeCol + canvasCellSizeCol);   
+                    ctx.lineTo(rowNumber * canvasCellSizeRow + canvasCellSizeRow, colNumber * canvasCellSizeCol + canvasCellSizeCol);  
+                    ctx.stroke();
+                    ctx.beginPath();      
+                    ctx.moveTo(rowNumber * canvasCellSizeRow, colNumber * canvasCellSizeCol);   
+                    ctx.lineTo(rowNumber * canvasCellSizeRow, colNumber * canvasCellSizeCol + canvasCellSizeCol);  
+                    ctx.stroke();
+                    ctx.beginPath();      
+                    ctx.moveTo(rowNumber * canvasCellSizeRow + canvasCellSizeRow, colNumber * canvasCellSizeCol);   
+                    ctx.lineTo(rowNumber * canvasCellSizeRow + canvasCellSizeRow, colNumber * canvasCellSizeCol + canvasCellSizeCol);  
+                    ctx.stroke();
+
+                    // убираем значение из массива
+                    resultCells[colNumber][rowNumber] = undefined;
+                } else {
+                    resultCells[colNumber][rowNumber] = color;
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(rowNumber * canvasCellSizeRow, colNumber * canvasCellSizeCol, canvasCellSizeRow, canvasCellSizeCol);
+                }
+                codeUpdate();
+            });
+
+            init();
+            draw();
+            window.draw = draw;
+
+            document.querySelector('.copyBtn').addEventListener('click', copyTextToClipboard)
+        })()
+    </script>
+</body>
